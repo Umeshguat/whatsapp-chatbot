@@ -69,6 +69,10 @@ const handleQuotation = async (client, msg, session) => {
         runningTotal += item.lineTotal;
       });
       summary += `\n*Running Total: ${formatCurrency(runningTotal)}*\n`;
+      summary += "\n*Available Products:*\n";
+      session.data.products.forEach((p, i) => {
+        summary += `*${i + 1}.* ${p.name} - Rs.${p.price}/${p.unit}\n`;
+      });
       summary += "\nSelect another product number, or type *done* to finish:";
 
       session.step = 2;
@@ -113,7 +117,7 @@ const handleQuotation = async (client, msg, session) => {
 };
 
 const showProductSelection = async (client, chatId, session) => {
-  const products = await Product.find({ isActive: true }).sort({ name: 1 });
+  const products = await Product.find({ isActive: true }).sort({ name: 1 }).lean();
 
   if (!products.length) {
     await client.sendMessage(chatId, "❌ No products found. Add products first.\n\nType *menu* to go back.");

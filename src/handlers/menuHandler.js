@@ -47,7 +47,8 @@ const menuHandler = async (client, msg) => {
   const session = getSession(chatId);
 
   // Global commands - reset to main menu
-  if (["menu", "hi", "hello", "start", "hey"].includes(text)) {
+  const greetings = ["menu", "hi", "hii", "hiii", "hello", "helo", "start", "hey", "heyy", "hola", "namaste", "yo"];
+  if (greetings.includes(text) || text.startsWith("hi") && text.length <= 5) {
     session.menu = "main";
     session.step = 0;
     session.data = {};
@@ -56,10 +57,16 @@ const menuHandler = async (client, msg) => {
   }
 
   // Back command
-  if (text === "0" || text === "back") {
+  if (text === "back") {
     session.menu = "main";
     session.step = 0;
     session.data = {};
+    await client.sendMessage(chatId, MAIN_MENU_TEXT);
+    return;
+  }
+
+  // "0" goes back only when in main menu (not during quotation/lead/product flows)
+  if (text === "0" && session.menu === "main") {
     await client.sendMessage(chatId, MAIN_MENU_TEXT);
     return;
   }

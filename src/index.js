@@ -9,12 +9,24 @@ const menuHandler = require("./handlers/menuHandler");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// WhatsApp Client
+// WhatsApp Client with stability fixes
 const client = new Client({
   authStrategy: new LocalAuth(),
+  webVersionCache: {
+    type: "remote",
+    remotePath:
+      "https://raw.githubusercontent.com/nicedeveloper/nicedeveloper.github.io/main/nicedeveloper.github.io/nicedeveloper/nicedeveloper_web_version",
+  },
   puppeteer: {
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--disable-gpu",
+    ],
   },
 });
 
@@ -31,16 +43,12 @@ client.on("ready", () => {
 });
 
 // Handle incoming messages
-// "message" = messages from others only
-// "message_create" = all messages including your own (for self-chat testing)
 const allowSelfChat = process.env.ALLOW_SELF_CHAT === "true";
 
 client.on("message_create", async (msg) => {
   try {
-    // If self-chat is enabled, respond to your own messages sent to yourself
     if (msg.fromMe) {
-      if (!allowSelfChat) return; // skip own messages when self-chat disabled
-      // Only respond to self-chat (messages to yourself), not messages you send to others
+      if (!allowSelfChat) return;
       if (msg.to !== msg.from) return;
     }
 
@@ -60,11 +68,13 @@ client.on("auth_failure", (error) => {
   console.error("Authentication failed:", error);
 });
 
-// Disconnected
+// Disconnected - reconnect with delay
 client.on("disconnected", (reason) => {
   console.log("Client disconnected:", reason);
-  console.log("Attempting to reconnect...");
-  client.initialize();
+  console.log("Reconnecting in 5 seconds...");
+  setTimeout(() => {
+    client.initialize();
+  }, 5000);
 });
 
 // Health check endpoint
