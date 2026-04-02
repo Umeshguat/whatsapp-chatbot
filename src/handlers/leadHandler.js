@@ -19,25 +19,37 @@ const handleAddLead = async (client, msg, session) => {
     case 0:
       session.step = 1;
       session.data = {};
-      await client.sendMessage(chatId, "📋 *Add New Lead*\n\nEnter contact person name:");
+      await client.sendMessage(
+        chatId,
+        `📋 *Let's add a new lead!*\n\nPlease share your *name* 🙂`
+      );
       break;
 
     case 1:
       session.data.contactPerson = text;
       session.step = 2;
-      await client.sendMessage(chatId, "Enter phone number:");
+      await client.sendMessage(
+        chatId,
+        `Thank you, *${text}*! 👍\n\nPlease share your *phone number* 📱`
+      );
       break;
 
     case 2:
       session.data.phone = text;
       session.step = 3;
-      await client.sendMessage(chatId, "Enter email:");
+      await client.sendMessage(
+        chatId,
+        `Got it! 👍\n\nPlease share your *email address* 📧`
+      );
       break;
 
     case 3:
       session.data.email = text;
       session.step = 4;
-      await client.sendMessage(chatId, "Enter company name:");
+      await client.sendMessage(
+        chatId,
+        `Thanks! 👍\n\nPlease share your *company name* 🏢`
+      );
       break;
 
     case 4:
@@ -45,7 +57,15 @@ const handleAddLead = async (client, msg, session) => {
       session.step = 5;
       await client.sendMessage(
         chatId,
-        "Select lead source:\n1. Website\n2. Referral\n3. LinkedIn\n4. Cold Call\n5. Email\n6. Trade Show\n7. Other\n\nReply with number:"
+        `Great! Almost done! 🎉\n\nHow did you hear about us?\n\n` +
+        `1️⃣ Website\n` +
+        `2️⃣ Referral\n` +
+        `3️⃣ LinkedIn\n` +
+        `4️⃣ Cold Call\n` +
+        `5️⃣ Email\n` +
+        `6️⃣ Trade Show\n` +
+        `7️⃣ Other\n\n` +
+        `Reply with the number 🙂`
       );
       break;
 
@@ -57,10 +77,10 @@ const handleAddLead = async (client, msg, session) => {
         const lead = result.data || result;
         await client.sendMessage(
           chatId,
-          `✅ *Lead Added Successfully!*\n\n${formatLeadSummary(lead)}\n\nType *menu* to go back.`
+          `✅ *Lead Added Successfully!* 🎉\n\n${formatLeadSummary(lead)}\n\nThank you for your details! We'll get back to you soon. 😊\n\nType *hi* to start again.`
         );
       } catch (error) {
-        await client.sendMessage(chatId, `❌ Error: ${error.message}\n\nType *menu* to go back.`);
+        await client.sendMessage(chatId, `❌ Oops! Something went wrong: ${error.message}\n\nType *hi* to try again.`);
       }
 
       session.menu = "main";
