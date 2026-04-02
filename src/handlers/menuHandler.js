@@ -11,6 +11,27 @@ const getSession = (chatId) => {
   return sessions.get(chatId);
 };
 
+// Extract choice number from any format: "1", "1️⃣", "1️⃣ Add Lead", "1. Add Lead", "Add Lead"
+const parseMenuChoice = (text) => {
+  const clean = text.trim().toLowerCase();
+
+  // Direct number match
+  if (/^[0-9]$/.test(clean)) return clean;
+
+  // Extract leading number from text like "1️⃣ Add Lead", "1. Add Lead", "1 Add Lead"
+  const numMatch = clean.match(/^(\d)/);
+  if (numMatch) return numMatch[1];
+
+  // Match by keyword
+  if (clean.includes("add lead")) return "1";
+  if (clean.includes("view lead")) return "2";
+  if (clean.includes("quotation") || clean.includes("quote")) return "3";
+  if (clean.includes("product")) return "4";
+  if (clean.includes("help")) return "5";
+
+  return clean;
+};
+
 const MAIN_MENU_TEXT =
   `🤖 *WhatsApp Business Bot*\n\n` +
   `Please select an option:\n\n` +
@@ -111,9 +132,9 @@ const menuHandler = async (client, msg) => {
 
 const handleMainMenu = async (client, msg, session) => {
   const chatId = msg.from;
-  const text = msg.body.trim();
+  const choice = parseMenuChoice(msg.body.trim());
 
-  switch (text) {
+  switch (choice) {
     case "1":
       session.menu = "lead_add";
       session.step = 0;

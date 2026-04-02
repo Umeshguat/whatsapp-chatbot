@@ -49,12 +49,12 @@ const formatQuotation = (quotation) => {
 const formatLeadSummary = (lead) => {
   return (
     `*Lead Details*\n` +
-    `Name    : ${lead.name}\n` +
-    `Phone   : ${lead.phone}\n` +
-    `Email   : ${lead.email || "N/A"}\n` +
-    `Company : ${lead.company || "N/A"}\n` +
+    `Name    : ${lead.contactPerson}\n` +
+    `Phone   : ${lead.phone || "N/A"}\n` +
+    `Email   : ${lead.email}\n` +
+    `Company : ${lead.companyName}\n` +
     `Source  : ${lead.source}\n` +
-    `Status  : ${lead.status}\n` +
+    `Stage   : ${lead.stage}\n` +
     `Added   : ${new Date(lead.createdAt).toLocaleDateString("en-IN")}`
   );
 };

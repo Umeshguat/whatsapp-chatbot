@@ -1,12 +1,15 @@
 const Lead = require("../models/Lead");
 const { formatLeadSummary } = require("../utils/formatter");
 
+// Must match Lead model enum: Website, Referral, LinkedIn, Trade Show, Cold Call, Email, Other
 const SOURCE_MAP = {
-  "1": "WhatsApp",
-  "2": "Website",
-  "3": "Referral",
+  "1": "Website",
+  "2": "Referral",
+  "3": "LinkedIn",
   "4": "Cold Call",
-  "5": "Other",
+  "5": "Email",
+  "6": "Trade Show",
+  "7": "Other",
 };
 
 const handleAddLead = async (client, msg, session) => {
@@ -17,11 +20,11 @@ const handleAddLead = async (client, msg, session) => {
     case 0:
       session.step = 1;
       session.data = {};
-      await client.sendMessage(chatId, "📋 *Add New Lead*\n\nEnter lead name:");
+      await client.sendMessage(chatId, "📋 *Add New Lead*\n\nEnter contact person name:");
       break;
 
     case 1:
-      session.data.name = text;
+      session.data.contactPerson = text;
       session.step = 2;
       await client.sendMessage(chatId, "Enter phone number:");
       break;
@@ -29,27 +32,26 @@ const handleAddLead = async (client, msg, session) => {
     case 2:
       session.data.phone = text;
       session.step = 3;
-      await client.sendMessage(chatId, "Enter email (or type *skip*):");
+      await client.sendMessage(chatId, "Enter email:");
       break;
 
     case 3:
-      session.data.email = text.toLowerCase() === "skip" ? "" : text;
+      session.data.email = text;
       session.step = 4;
-      await client.sendMessage(chatId, "Enter company name (or type *skip*):");
+      await client.sendMessage(chatId, "Enter company name:");
       break;
 
     case 4:
-      session.data.company = text.toLowerCase() === "skip" ? "" : text;
+      session.data.companyName = text;
       session.step = 5;
       await client.sendMessage(
         chatId,
-        "Select lead source:\n1. WhatsApp\n2. Website\n3. Referral\n4. Cold Call\n5. Other\n\nReply with number:"
+        "Select lead source:\n1. Website\n2. Referral\n3. LinkedIn\n4. Cold Call\n5. Email\n6. Trade Show\n7. Other\n\nReply with number:"
       );
       break;
 
     case 5:
-      session.data.source = SOURCE_MAP[text] || "WhatsApp";
-      session.data.createdBy = chatId;
+      session.data.source = SOURCE_MAP[text] || "Other";
 
       try {
         const lead = await Lead.create(session.data);
@@ -68,6 +70,9 @@ const handleAddLead = async (client, msg, session) => {
   }
 };
 
+// Stage values from model: New, Qualified, Proposal, Negotiation, Won, Lost
+const STAGE_MAP = { "1": "New", "2": "Qualified", "3": "Proposal", "4": "Negotiation", "5": "Won", "6": "Lost" };
+
 const handleViewLeads = async (client, msg, session) => {
   const chatId = msg.from;
   const text = msg.body.trim();
@@ -85,7 +90,7 @@ const handleViewLeads = async (client, msg, session) => {
 
       let list = `📋 *Recent Leads* (${leads.length} of ${total})\n\n`;
       leads.forEach((lead, i) => {
-        list += `*${i + 1}.* ${lead.name} - ${lead.phone} [${lead.status}]\n`;
+        list += `*${i + 1}.* ${lead.contactPerson} - ${lead.phone} [${lead.stage}]\n`;
       });
       list += "\nReply with number to view details, or *0* to go back.";
 
@@ -109,7 +114,7 @@ const handleViewLeads = async (client, msg, session) => {
       const lead = session.data.leads[index];
       await client.sendMessage(
         chatId,
-        `${formatLeadSummary(lead)}\n\n*Update Status:*\n1. New\n2. Contacted\n3. Qualified\n4. Lost\n5. Converted\n0. Back\n\nReply with number to update status:`
+        `${formatLeadSummary(lead)}\n\n*Update Stage:*\n1. New\n2. Qualified\n3. Proposal\n4. Negotiation\n5. Won\n6. Lost\n0. Back\n\nReply with number:`
       );
       session.data.selectedLead = lead;
       session.step = 2;
@@ -124,13 +129,12 @@ const handleViewLeads = async (client, msg, session) => {
       return "show_menu";
     }
 
-    const statusMap = { "1": "New", "2": "Contacted", "3": "Qualified", "4": "Lost", "5": "Converted" };
-    const newStatus = statusMap[text];
+    const newStage = STAGE_MAP[text];
 
-    if (newStatus && session.data.selectedLead) {
+    if (newStage && session.data.selectedLead) {
       try {
-        await Lead.findByIdAndUpdate(session.data.selectedLead._id, { status: newStatus });
-        await client.sendMessage(chatId, `✅ Status updated to *${newStatus}*\n\nType *menu* to go back.`);
+        await Lead.findByIdAndUpdate(session.data.selectedLead._id, { stage: newStage });
+        await client.sendMessage(chatId, `✅ Stage updated to *${newStage}*\n\nType *menu* to go back.`);
       } catch (error) {
         await client.sendMessage(chatId, `❌ Error: ${error.message}`);
       }
