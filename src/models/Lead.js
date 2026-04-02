@@ -2,46 +2,75 @@ const mongoose = require("mongoose");
 
 const leadSchema = new mongoose.Schema(
   {
-    name: {
+    companyName: {
       type: String,
-      required: [true, "Lead name is required"],
+      required: [true, "Company name is required"],
+      trim: true,
+      maxlength: 100,
+    },
+    contactPerson: {
+      type: String,
+      required: [true, "Contact person is required"],
+      trim: true,
+      maxlength: 50,
+    },
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      lowercase: true,
       trim: true,
     },
     phone: {
       type: String,
-      required: [true, "Phone number is required"],
-      trim: true,
-    },
-    email: {
-      type: String,
       trim: true,
       default: "",
     },
-    company: {
+    value: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    stage: {
       type: String,
-      trim: true,
-      default: "",
+      enum: ["New", "Qualified", "Proposal", "Negotiation", "Won", "Lost"],
+      default: "New",
     },
     source: {
       type: String,
-      enum: ["WhatsApp", "Website", "Referral", "Cold Call", "Other"],
-      default: "WhatsApp",
+      enum: [
+        "Website",
+        "Referral",
+        "LinkedIn",
+        "Trade Show",
+        "Cold Call",
+        "Email",
+        "Other",
+      ],
+      default: "Other",
     },
-    status: {
-      type: String,
-      enum: ["New", "Contacted", "Qualified", "Lost", "Converted"],
-      default: "New",
+    assignee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     notes: {
       type: String,
+      trim: true,
       default: "",
     },
+    products: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
     createdBy: {
-      type: String,
-      default: "",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Lead", leadSchema);
+const Lead = mongoose.model("Lead", leadSchema);
+
+module.exports = Lead;

@@ -5,34 +5,62 @@ const productSchema = new mongoose.Schema(
     name: {
       type: String,
       required: [true, "Product name is required"],
+      trim: true,
+      maxlength: 100,
+    },
+    sku: {
+      type: String,
+      required: [true, "SKU is required"],
       unique: true,
+      uppercase: true,
       trim: true,
     },
     price: {
       type: Number,
-      required: [true, "Product price is required"],
-      min: [0, "Price cannot be negative"],
+      required: [true, "Price is required"],
+      min: 0,
+    },
+    stock: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+    },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: [true, "Category is required"],
+    },
+    status: {
+      type: String,
+      enum: ["Active", "Low Stock", "Out of Stock"],
+      default: "Active",
     },
     description: {
       type: String,
       trim: true,
       default: "",
     },
-    unit: {
+    image: {
       type: String,
-      default: "piece",
+      default: "",
     },
-    category: {
-      type: String,
-      trim: true,
-      default: "General",
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Product", productSchema);
+productSchema.pre("save", function () {
+  if (this.isModified("stock")) {
+    if (this.stock === 0) this.status = "Out of Stock";
+    else if (this.stock <= 20) this.status = "Low Stock";
+    else this.status = "Active";
+  }
+});
+
+const Product = mongoose.model("Product", productSchema);
+
+module.exports = Product;

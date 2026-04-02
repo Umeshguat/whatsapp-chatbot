@@ -1,97 +1,140 @@
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 
-const quotationItemSchema = new mongoose.Schema({
-  product: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Product",
+const quotationItemSchema = new mongoose.Schema(
+  {
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: [true, "Product is required"],
+    },
+    quantity: {
+      type: Number,
+      required: [true, "Quantity is required"],
+      min: 1,
+    },
+    unitPrice: {
+      type: Number,
+      required: [true, "Unit price is required"],
+      min: 0,
+    },
+    total: {
+      type: Number,
+      default: 0,
+    },
   },
-  productName: String,
-  unitPrice: Number,
-  quantity: {
-    type: Number,
-    min: [1, "Quantity must be at least 1"],
-  },
-  lineTotal: Number,
-});
+  { _id: true }
+);
 
 const quotationSchema = new mongoose.Schema(
   {
     quotationNumber: {
       type: String,
-      required: true,
       unique: true,
     },
     lead: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Lead",
-      default: null,
+      required: [true, "Lead is required"],
+      index: true,
     },
-    customerName: {
+    items: {
+      type: [quotationItemSchema],
+      validate: {
+        validator: (v) => Array.isArray(v) && v.length > 0,
+        message: "At least one item is required",
+      },
+    },
+    discountType: {
       type: String,
-      required: [true, "Customer name is required"],
+      enum: ["PERCENTAGE", "FLAT"],
+      default: "FLAT",
     },
-    items: [quotationItemSchema],
-    subtotal: {
-      type: Number,
-      default: 0,
-    },
-    discountPercent: {
+    discountValue: {
       type: Number,
       default: 0,
       min: 0,
-      max: 100,
+    },
+    subtotal: {
+      type: Number,
+      default: 0,
     },
     discountAmount: {
       type: Number,
       default: 0,
     },
-    grandTotal: {
+    total: {
       type: Number,
       default: 0,
     },
     status: {
       type: String,
-      enum: ["Draft", "Sent", "Accepted", "Rejected"],
-      default: "Draft",
+      enum: ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED"],
+      default: "DRAFT",
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    validUntil: {
+      type: Date,
+      default: null,
+    },
+    publicToken: {
+      type: String,
+      unique: true,
+      index: true,
     },
     createdBy: {
-      type: String,
-      default: "",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
   },
   { timestamps: true }
 );
 
-quotationSchema.methods.calculateTotals = function () {
-  this.subtotal = this.items.reduce((sum, item) => {
-    item.lineTotal = item.unitPrice * item.quantity;
-    return sum + item.lineTotal;
-  }, 0);
-
-  this.discountAmount = (this.subtotal * this.discountPercent) / 100;
-  this.grandTotal = this.subtotal - this.discountAmount;
-};
-
-quotationSchema.statics.generateQuotationNumber = async function () {
-  const today = new Date();
-  const dateStr =
-    today.getFullYear().toString() +
-    String(today.getMonth() + 1).padStart(2, "0") +
-    String(today.getDate()).padStart(2, "0");
-
-  const prefix = `QT-${dateStr}-`;
-
-  const lastQuotation = await this.findOne({
-    quotationNumber: { $regex: `^${prefix}` },
-  }).sort({ quotationNumber: -1 });
-
-  let nextNum = 1;
-  if (lastQuotation) {
-    const lastNum = parseInt(lastQuotation.quotationNumber.split("-").pop());
-    nextNum = lastNum + 1;
+// Auto-generate quotation number + compute totals
+quotationSchema.pre("save", async function () {
+  // Auto-generate public token for new documents
+  if (this.isNew && !this.publicToken) {
+    this.publicToken = crypto.randomBytes(16).toString("hex");
   }
 
-  return `${prefix}${String(nextNum).padStart(3, "0")}`;
-};
+  // Auto-generate quotation number for new documents
+  if (this.isNew && !this.quotationNumber) {
+    const last = await mongoose
+      .model("Quotation")
+      .findOne({}, { quotationNumber: 1 })
+      .sort({ createdAt: -1 });
 
-module.exports = mongoose.model("Quotation", quotationSchema);
+    let nextNum = 1;
+    if (last?.quotationNumber) {
+      const match = last.quotationNumber.match(/QTN-(\d+)/);
+      if (match) nextNum = parseInt(match[1], 10) + 1;
+    }
+    this.quotationNumber = `QTN-${String(nextNum).padStart(4, "0")}`;
+  }
+
+  // Compute item totals and subtotal
+  let subtotal = 0;
+  for (const item of this.items) {
+    item.total = item.quantity * item.unitPrice;
+    subtotal += item.total;
+  }
+  this.subtotal = subtotal;
+
+  // Compute discount
+  if (this.discountType === "PERCENTAGE") {
+    this.discountAmount = Math.round((subtotal * this.discountValue) / 100 * 100) / 100;
+  } else {
+    this.discountAmount = this.discountValue;
+  }
+
+  // Compute total
+  this.total = Math.max(subtotal - this.discountAmount, 0);
+});
+
+const Quotation = mongoose.model("Quotation", quotationSchema);
+
+module.exports = Quotation;
