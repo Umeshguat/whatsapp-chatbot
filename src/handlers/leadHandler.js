@@ -1,16 +1,6 @@
 const apiClient = require("../utils/apiClient");
 const { formatLeadSummary } = require("../utils/formatter");
 
-const SOURCE_MAP = {
-  "1": "Website",
-  "2": "Referral",
-  "3": "LinkedIn",
-  "4": "Cold Call",
-  "5": "Email",
-  "6": "Trade Show",
-  "7": "Other",
-};
-
 const handleAddLead = async (client, msg, session) => {
   const chatId = msg.from;
   const text = msg.body.trim();
@@ -21,7 +11,7 @@ const handleAddLead = async (client, msg, session) => {
       session.data = {};
       await client.sendMessage(
         chatId,
-        `📋 *Let's add a new lead!*\n\nPlease share your *name* 🙂`
+        `Please share your *name* 🙂`
       );
       break;
 
@@ -54,23 +44,7 @@ const handleAddLead = async (client, msg, session) => {
 
     case 4:
       session.data.companyName = text;
-      session.step = 5;
-      await client.sendMessage(
-        chatId,
-        `Great! Almost done! 🎉\n\nHow did you hear about us?\n\n` +
-        `1️⃣ Website\n` +
-        `2️⃣ Referral\n` +
-        `3️⃣ LinkedIn\n` +
-        `4️⃣ Cold Call\n` +
-        `5️⃣ Email\n` +
-        `6️⃣ Trade Show\n` +
-        `7️⃣ Other\n\n` +
-        `Reply with the number 🙂`
-      );
-      break;
-
-    case 5:
-      session.data.source = SOURCE_MAP[text] || "Other";
+      session.data.source = "WhatsApp";
 
       try {
         const result = await apiClient.post("/api/v1/public/leads", session.data);
