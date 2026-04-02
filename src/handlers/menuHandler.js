@@ -1,3 +1,4 @@
+const { List } = require("whatsapp-web.js");
 const { handleAddLead, handleViewLeads } = require("./leadHandler");
 const { handleQuotation } = require("./quotationHandler");
 const { handleProductMenu, handleAddProduct } = require("./productHandler");
@@ -11,15 +12,41 @@ const getSession = (chatId) => {
   return sessions.get(chatId);
 };
 
-const MAIN_MENU_TEXT =
-  `🤖 *WhatsApp Business Bot*\n\n` +
-  `Please select an option:\n\n` +
-  `1️⃣ Add Lead\n` +
-  `2️⃣ View Leads\n` +
-  `3️⃣ Generate Quotation\n` +
-  `4️⃣ Manage Products\n` +
-  `5️⃣ Help\n\n` +
-  `Reply with the number of your choice.`;
+// Extract row ID from list response or fall back to message body
+const getSelectedId = (msg) => {
+  if (msg.type === "list_response") {
+    const rowId =
+      msg.selectedRowId ||
+      (msg._data &&
+        msg._data.listResponse &&
+        msg._data.listResponse.singleSelectReply &&
+        msg._data.listResponse.singleSelectReply.selectedRowId);
+    if (rowId) return rowId;
+  }
+  return msg.body ? msg.body.trim() : "";
+};
+
+const sendMainMenu = async (client, chatId) => {
+  const list = new List(
+    "Please select an option from the menu below:",
+    "View Menu",
+    [
+      {
+        title: "Main Menu",
+        rows: [
+          { id: "menu_1", title: "Add Lead", description: "Save a new lead with contact details" },
+          { id: "menu_2", title: "View Leads", description: "See recent leads and update status" },
+          { id: "menu_3", title: "Generate Quotation", description: "Create quotation with products" },
+          { id: "menu_4", title: "Manage Products", description: "View catalog and add products" },
+          { id: "menu_5", title: "Help", description: "View help guide and commands" },
+        ],
+      },
+    ],
+    "🤖 WhatsApp Business Bot",
+    "Reply with a number or tap to select"
+  );
+  await client.sendMessage(chatId, list);
+};
 
 const HELP_TEXT =
   `📖 *Help Guide*\n\n` +
@@ -39,20 +66,21 @@ const menuHandler = async (client, msg) => {
   // Ignore group messages and status updates
   if (msg.from.includes("@g.us") || msg.from === "status@broadcast") return;
 
-  // Skip empty messages
-  if (!msg.body || !msg.body.trim()) return;
+  // Skip empty messages (but allow list_response which may have empty body)
+  if (msg.type !== "list_response" && (!msg.body || !msg.body.trim())) return;
 
   const chatId = msg.from;
-  const text = msg.body.trim().toLowerCase();
+  const text = msg.body ? msg.body.trim().toLowerCase() : "";
+  const selectedId = getSelectedId(msg);
   const session = getSession(chatId);
 
   // Global commands - reset to main menu
   const greetings = ["menu", "hi", "hii", "hiii", "hello", "helo", "start", "hey", "heyy", "hola", "namaste", "yo"];
-  if (greetings.includes(text) || text.startsWith("hi") && text.length <= 5) {
+  if (greetings.includes(text) || (text.startsWith("hi") && text.length <= 5)) {
     session.menu = "main";
     session.step = 0;
     session.data = {};
-    await client.sendMessage(chatId, MAIN_MENU_TEXT);
+    await sendMainMenu(client, chatId);
     return;
   }
 
@@ -61,15 +89,18 @@ const menuHandler = async (client, msg) => {
     session.menu = "main";
     session.step = 0;
     session.data = {};
-    await client.sendMessage(chatId, MAIN_MENU_TEXT);
+    await sendMainMenu(client, chatId);
     return;
   }
 
   // "0" goes back only when in main menu (not during quotation/lead/product flows)
   if (text === "0" && session.menu === "main") {
-    await client.sendMessage(chatId, MAIN_MENU_TEXT);
+    await sendMainMenu(client, chatId);
     return;
   }
+
+  // Attach selectedId to msg for handlers to use
+  msg._selectedId = selectedId;
 
   // Route based on current menu
   switch (session.menu) {
@@ -84,7 +115,7 @@ const menuHandler = async (client, msg) => {
     case "lead_view":
       const result = await handleViewLeads(client, msg, session);
       if (result === "show_menu") {
-        await client.sendMessage(chatId, MAIN_MENU_TEXT);
+        await sendMainMenu(client, chatId);
       }
       break;
 
@@ -95,7 +126,7 @@ const menuHandler = async (client, msg) => {
     case "product":
       const prodResult = await handleProductMenu(client, msg, session);
       if (prodResult === "show_menu") {
-        await client.sendMessage(chatId, MAIN_MENU_TEXT);
+        await sendMainMenu(client, chatId);
       }
       break;
 
@@ -104,16 +135,26 @@ const menuHandler = async (client, msg) => {
       break;
 
     default:
-      await client.sendMessage(chatId, MAIN_MENU_TEXT);
+      await sendMainMenu(client, chatId);
       break;
   }
 };
 
 const handleMainMenu = async (client, msg, session) => {
   const chatId = msg.from;
-  const text = msg.body.trim();
+  const text = msg.body ? msg.body.trim() : "";
+  const selectedId = msg._selectedId || text;
 
-  switch (text) {
+  // Map list selection IDs to menu choices
+  const choice =
+    selectedId === "menu_1" ? "1" :
+    selectedId === "menu_2" ? "2" :
+    selectedId === "menu_3" ? "3" :
+    selectedId === "menu_4" ? "4" :
+    selectedId === "menu_5" ? "5" :
+    text;
+
+  switch (choice) {
     case "1":
       session.menu = "lead_add";
       session.step = 0;
@@ -153,3 +194,4 @@ const handleMainMenu = async (client, msg, session) => {
 };
 
 module.exports = menuHandler;
+module.exports.sendMainMenu = sendMainMenu;

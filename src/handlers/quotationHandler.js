@@ -1,10 +1,12 @@
+const { List } = require("whatsapp-web.js");
 const Product = require("../models/Product");
 const Quotation = require("../models/Quotation");
 const { formatQuotation, formatCurrency } = require("../utils/formatter");
 
 const handleQuotation = async (client, msg, session) => {
   const chatId = msg.from;
-  const text = msg.body.trim();
+  const text = msg.body ? msg.body.trim() : "";
+  const selectedId = msg._selectedId || text;
 
   switch (session.step) {
     case 0:
@@ -20,9 +22,9 @@ const handleQuotation = async (client, msg, session) => {
       break;
 
     case 2: {
-      if (text.toLowerCase() === "done") {
+      if (selectedId === "qtn_done" || text.toLowerCase() === "done") {
         if (session.data.items.length === 0) {
-          await client.sendMessage(chatId, "❌ Add at least one product before finishing.\n\nSelect a product number or type *0* to cancel:");
+          await client.sendMessage(chatId, "❌ Add at least one product before finishing.\n\nSelect a product or type *0* to cancel:");
           return;
         }
         session.step = 4;
@@ -30,9 +32,16 @@ const handleQuotation = async (client, msg, session) => {
         return;
       }
 
-      const index = parseInt(text) - 1;
+      // Handle both list selection (qtn_prod_0, qtn_prod_1...) and number input
+      let index;
+      if (selectedId.startsWith("qtn_prod_")) {
+        index = parseInt(selectedId.replace("qtn_prod_", ""));
+      } else {
+        index = parseInt(text) - 1;
+      }
+
       if (!session.data.products || !session.data.products[index]) {
-        await client.sendMessage(chatId, "❌ Invalid selection. Enter product number, *done* to finish, or *0* to cancel.");
+        await client.sendMessage(chatId, "❌ Invalid selection. Select a product, type *done* to finish, or *0* to cancel.");
         return;
       }
 
@@ -69,14 +78,10 @@ const handleQuotation = async (client, msg, session) => {
         runningTotal += item.lineTotal;
       });
       summary += `\n*Running Total: ${formatCurrency(runningTotal)}*\n`;
-      summary += "\n*Available Products:*\n";
-      session.data.products.forEach((p, i) => {
-        summary += `*${i + 1}.* ${p.name} - Rs.${p.price}/${p.unit}\n`;
-      });
-      summary += "\nSelect another product number, or type *done* to finish:";
 
       session.step = 2;
       await client.sendMessage(chatId, summary);
+      await showProductSelection(client, chatId, session, true);
       break;
     }
 
@@ -116,7 +121,7 @@ const handleQuotation = async (client, msg, session) => {
   }
 };
 
-const showProductSelection = async (client, chatId, session) => {
+const showProductSelection = async (client, chatId, session, isAddMore = false) => {
   const products = await Product.find({ isActive: true }).sort({ name: 1 }).lean();
 
   if (!products.length) {
@@ -128,13 +133,27 @@ const showProductSelection = async (client, chatId, session) => {
 
   session.data.products = products;
 
-  let text = "*Select a product to add:*\n\n";
-  products.forEach((p, i) => {
-    text += `*${i + 1}.* ${p.name} - Rs.${p.price}/${p.unit}\n`;
-  });
-  text += "\nReply with product number.\nType *done* when finished adding products.\nType *0* to cancel.";
+  const rows = products.map((p, i) => ({
+    id: `qtn_prod_${i}`,
+    title: p.name,
+    description: `Rs.${p.price}/${p.unit}`,
+  }));
 
-  await client.sendMessage(chatId, text);
+  if (isAddMore) {
+    rows.push({ id: "qtn_done", title: "✅ Done", description: "Finish adding products" });
+  }
+
+  const productList = new List(
+    isAddMore
+      ? "Select another product or tap Done to finish:"
+      : "Select a product to add to the quotation:",
+    "Select Product",
+    [{ title: "Available Products", rows }],
+    "📄 Product Selection",
+    isAddMore ? "Add more or finish" : "Reply with number or tap to select"
+  );
+
+  await client.sendMessage(chatId, productList);
 };
 
 module.exports = { handleQuotation };

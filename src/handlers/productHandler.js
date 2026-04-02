@@ -1,34 +1,49 @@
+const { List } = require("whatsapp-web.js");
 const Product = require("../models/Product");
 const { formatProductList } = require("../utils/formatter");
 
 const handleProductMenu = async (client, msg, session) => {
   const chatId = msg.from;
-  const text = msg.body.trim();
+  const text = msg.body ? msg.body.trim() : "";
+  const selectedId = msg._selectedId || text;
 
   if (session.step === 0) {
     session.step = 1;
-    await client.sendMessage(
-      chatId,
-      "📦 *Product Management*\n\n1. List All Products\n2. Add New Product\n0. Back to Main Menu\n\nReply with number:"
+    const productMenuList = new List(
+      "What would you like to do?",
+      "Select Option",
+      [
+        {
+          title: "Product Management",
+          rows: [
+            { id: "prod_list", title: "List All Products", description: "View active product catalog" },
+            { id: "prod_add", title: "Add New Product", description: "Add a new product to catalog" },
+            { id: "prod_back", title: "⬅ Back", description: "Go back to main menu" },
+          ],
+        },
+      ],
+      "📦 Product Management",
+      "Tap to select or reply with number"
     );
+    await client.sendMessage(chatId, productMenuList);
     return;
   }
 
   if (session.step === 1) {
-    if (text === "0") {
+    if (selectedId === "prod_back" || text === "0") {
       session.menu = "main";
       session.step = 0;
       return "show_menu";
     }
 
-    if (text === "1") {
+    if (selectedId === "prod_list" || text === "1") {
       const products = await Product.find({ isActive: true }).sort({ name: 1 });
       await client.sendMessage(chatId, formatProductList(products) + "\nType *0* to go back.");
       session.step = 0;
       return;
     }
 
-    if (text === "2") {
+    if (selectedId === "prod_add" || text === "2") {
       session.menu = "product_add";
       session.step = 0;
       session.data = {};
