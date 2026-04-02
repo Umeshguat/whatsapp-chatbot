@@ -77,6 +77,8 @@ client.on("disconnected", (reason) => {
   }, 5000);
 });
 
+app.use(express.json());
+
 // Health check endpoint
 app.get("/", (req, res) => {
   res.json({ status: "running", bot: "WhatsApp Chatbot" });
@@ -84,6 +86,63 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Send a message to a phone number (one-way, no bot reply)
+// POST /api/send-test { phone: "919876543210", message: "Hello from bot!" }
+app.post("/api/send-test", async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ success: false, message: "phone and message are required" });
+    }
+
+    const chatId = phone.includes("@c.us") ? phone : `${phone}@c.us`;
+
+    const state = await client.getState();
+    if (state !== "CONNECTED") {
+      return res.status(503).json({ success: false, message: "WhatsApp client not connected" });
+    }
+
+    await client.sendMessage(chatId, message);
+    res.json({ success: true, message: `Message sent to ${chatId}` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Simulate incoming message — bot processes it and replies on WhatsApp
+// POST /api/simulate { phone: "919876543210", message: "hi" }
+app.post("/api/simulate", async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ success: false, message: "phone and message are required" });
+    }
+
+    const chatId = phone.includes("@c.us") ? phone : `${phone}@c.us`;
+
+    const state = await client.getState();
+    if (state !== "CONNECTED") {
+      return res.status(503).json({ success: false, message: "WhatsApp client not connected" });
+    }
+
+    // Create a fake incoming message object for the menu handler
+    const fakeMsg = {
+      from: chatId,
+      to: chatId,
+      body: message,
+      fromMe: false,
+      type: "chat",
+    };
+
+    await menuHandler(client, fakeMsg);
+    res.json({ success: true, message: `Bot replied to ${chatId} for: "${message}"` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 // Start
