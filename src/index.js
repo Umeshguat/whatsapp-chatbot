@@ -3,7 +3,6 @@ require("dotenv").config();
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const express = require("express");
-const connectDB = require("./config/db");
 const menuHandler = require("./handlers/menuHandler");
 
 const app = express();
@@ -89,7 +88,6 @@ app.get("/health", (req, res) => {
 });
 
 // Send a message to a phone number (one-way, no bot reply)
-// POST /api/send-test { phone: "919876543210", message: "Hello from bot!" }
 app.post("/api/send-test", async (req, res) => {
   try {
     const { phone, message } = req.body;
@@ -113,7 +111,6 @@ app.post("/api/send-test", async (req, res) => {
 });
 
 // Simulate incoming message — bot processes it and replies on WhatsApp
-// POST /api/simulate { phone: "919876543210", message: "hi" }
 app.post("/api/simulate", async (req, res) => {
   try {
     const { phone, message } = req.body;
@@ -129,7 +126,6 @@ app.post("/api/simulate", async (req, res) => {
       return res.status(503).json({ success: false, message: "WhatsApp client not connected" });
     }
 
-    // Create a fake incoming message object for the menu handler
     const fakeMsg = {
       from: chatId,
       to: chatId,
@@ -147,7 +143,6 @@ app.post("/api/simulate", async (req, res) => {
 
 // Start
 const start = async () => {
-  await connectDB();
   console.log("Initializing WhatsApp client...");
   client.initialize();
 

@@ -65,7 +65,7 @@ const formatProductList = (products) => {
   let text = "*Product Catalog:*\n\n";
   products.forEach((p, i) => {
     text += `*${i + 1}.* ${p.name}\n`;
-    text += `   Price: ${formatCurrency(p.price)}/${p.unit}\n`;
+    text += `   Price: ${formatCurrency(p.price)}/${p.unit || "piece"}\n`;
     if (p.description) text += `   ${p.description}\n`;
     text += "\n";
   });

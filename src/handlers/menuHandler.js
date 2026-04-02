@@ -1,6 +1,6 @@
 const { handleAddLead, handleViewLeads } = require("./leadHandler");
 const { handleQuotation } = require("./quotationHandler");
-const { handleProductMenu, handleAddProduct } = require("./productHandler");
+const { handleProductMenu } = require("./productHandler");
 
 const sessions = new Map();
 
@@ -110,7 +110,10 @@ const menuHandler = async (client, msg) => {
       break;
 
     case "quotation":
-      await handleQuotation(client, msg, session);
+      const quotResult = await handleQuotation(client, msg, session);
+      if (quotResult === "show_menu") {
+        await client.sendMessage(chatId, MAIN_MENU_TEXT);
+      }
       break;
 
     case "product":
@@ -118,10 +121,6 @@ const menuHandler = async (client, msg) => {
       if (prodResult === "show_menu") {
         await client.sendMessage(chatId, MAIN_MENU_TEXT);
       }
-      break;
-
-    case "product_add":
-      await handleAddProduct(client, msg, session);
       break;
 
     default:

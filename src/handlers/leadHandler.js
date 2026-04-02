@@ -1,7 +1,6 @@
-const Lead = require("../models/Lead");
+const apiClient = require("../utils/apiClient");
 const { formatLeadSummary } = require("../utils/formatter");
 
-// Must match Lead model enum: Website, Referral, LinkedIn, Trade Show, Cold Call, Email, Other
 const SOURCE_MAP = {
   "1": "Website",
   "2": "Referral",
@@ -54,7 +53,8 @@ const handleAddLead = async (client, msg, session) => {
       session.data.source = SOURCE_MAP[text] || "Other";
 
       try {
-        const lead = await Lead.create(session.data);
+        const result = await apiClient.post("/api/v1/public/leads", session.data);
+        const lead = result.data || result;
         await client.sendMessage(
           chatId,
           `✅ *Lead Added Successfully!*\n\n${formatLeadSummary(lead)}\n\nType *menu* to go back.`
@@ -70,17 +70,15 @@ const handleAddLead = async (client, msg, session) => {
   }
 };
 
-// Stage values from model: New, Qualified, Proposal, Negotiation, Won, Lost
-const STAGE_MAP = { "1": "New", "2": "Qualified", "3": "Proposal", "4": "Negotiation", "5": "Won", "6": "Lost" };
-
 const handleViewLeads = async (client, msg, session) => {
   const chatId = msg.from;
   const text = msg.body.trim();
 
   if (session.step === 0) {
     try {
-      const leads = await Lead.find().sort({ createdAt: -1 }).limit(10);
-      const total = await Lead.countDocuments();
+      const result = await apiClient.get("/api/v1/public/leads?page=1&limit=10");
+      const leads = result.data?.leads || result.data || result.leads || [];
+      const total = result.data?.total || result.total || result.totalCount || leads.length;
 
       if (!leads.length) {
         await client.sendMessage(chatId, "No leads found.\n\nType *menu* to go back.");
@@ -90,7 +88,7 @@ const handleViewLeads = async (client, msg, session) => {
 
       let list = `📋 *Recent Leads* (${leads.length} of ${total})\n\n`;
       leads.forEach((lead, i) => {
-        list += `*${i + 1}.* ${lead.contactPerson} - ${lead.phone} [${lead.stage}]\n`;
+        list += `*${i + 1}.* ${lead.contactPerson} - ${lead.phone || "N/A"} [${lead.stage || "New"}]\n`;
       });
       list += "\nReply with number to view details, or *0* to go back.";
 
@@ -114,37 +112,14 @@ const handleViewLeads = async (client, msg, session) => {
       const lead = session.data.leads[index];
       await client.sendMessage(
         chatId,
-        `${formatLeadSummary(lead)}\n\n*Update Stage:*\n1. New\n2. Qualified\n3. Proposal\n4. Negotiation\n5. Won\n6. Lost\n0. Back\n\nReply with number:`
+        `${formatLeadSummary(lead)}\n\nType *0* to go back or *menu* for main menu.`
       );
-      session.data.selectedLead = lead;
-      session.step = 2;
-    } else {
-      await client.sendMessage(chatId, "Invalid selection. Try again or type *0* to go back.");
-    }
-  } else if (session.step === 2) {
-    if (text === "0") {
       session.menu = "main";
       session.step = 0;
       session.data = {};
-      return "show_menu";
-    }
-
-    const newStage = STAGE_MAP[text];
-
-    if (newStage && session.data.selectedLead) {
-      try {
-        await Lead.findByIdAndUpdate(session.data.selectedLead._id, { stage: newStage });
-        await client.sendMessage(chatId, `✅ Stage updated to *${newStage}*\n\nType *menu* to go back.`);
-      } catch (error) {
-        await client.sendMessage(chatId, `❌ Error: ${error.message}`);
-      }
     } else {
-      await client.sendMessage(chatId, "Invalid option. Type *menu* to go back.");
+      await client.sendMessage(chatId, "Invalid selection. Try again or type *0* to go back.");
     }
-
-    session.menu = "main";
-    session.step = 0;
-    session.data = {};
   }
 };
 
