@@ -91,19 +91,17 @@ const menuHandler = async (client, msg) => {
       await handleAddLead(client, msg, session);
       break;
 
-    case "lead_view":
-      const result = await handleViewLeads(client, msg, session);
-      if (result === "show_menu") {
-        await client.sendMessage(
-          chatId,
-          `Would you like to add a new lead? 📝\n\nReply *Yes* to add a lead\nReply *Help* for assistance`
-        );
-      }
+    case "ask_quotation":
+      await handleAskQuotationResponse(client, msg, session);
       break;
 
     case "quotation":
-      const quotResult = await handleQuotation(client, msg, session);
-      if (quotResult === "show_menu") {
+      await handleQuotation(client, msg, session);
+      break;
+
+    case "lead_view":
+      const result = await handleViewLeads(client, msg, session);
+      if (result === "show_menu") {
         await client.sendMessage(
           chatId,
           `Would you like to add a new lead? 📝\n\nReply *Yes* to add a lead\nReply *Help* for assistance`
@@ -164,6 +162,42 @@ const handleGreetingResponse = async (client, msg, session) => {
   await client.sendMessage(
     chatId,
     `I didn't quite get that. 🤔\n\nReply *Yes* to add a lead\nReply *Help* for assistance\nOr type *hi* to start over.`
+  );
+};
+
+const handleAskQuotationResponse = async (client, msg, session) => {
+  const chatId = msg.from;
+  const text = msg.body.trim().toLowerCase();
+
+  // Yes - start quotation flow with the lead already selected
+  const yesResponses = ["yes", "yep", "yeah", "y", "sure", "ok", "okay", "haan", "ha"];
+  if (yesResponses.includes(text)) {
+    const leadId = session.data.leadId;
+    const leadName = session.data.leadName;
+    session.menu = "quotation";
+    session.step = 0;
+    session.data = { items: [], leadId, leadName };
+    await handleQuotation(client, msg, session);
+    return;
+  }
+
+  // No - end conversation
+  const noResponses = ["no", "nope", "nah", "n", "nahi"];
+  if (noResponses.includes(text)) {
+    session.menu = "main";
+    session.step = 0;
+    session.data = {};
+    await client.sendMessage(
+      chatId,
+      `No worries! Thank you for your time. 😊\n\nFeel free to type *hi* anytime you need help.`
+    );
+    return;
+  }
+
+  // Invalid input
+  await client.sendMessage(
+    chatId,
+    `I didn't quite get that. 🤔\n\nReply *Yes* to generate a quotation\nReply *No* to finish`
   );
 };
 

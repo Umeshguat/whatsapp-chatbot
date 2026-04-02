@@ -6,91 +6,61 @@ const handleQuotation = async (client, msg, session) => {
   const text = msg.body.trim();
 
   switch (session.step) {
-    // Step 0: Fetch and show leads for selection
+    // Step 0: Show products to select
     case 0: {
-      try {
-        const result = await apiClient.get("/api/v1/public/leads?page=1&limit=10");
-        const leads = result.data?.leads || result.data || result.leads || [];
-
-        if (!leads.length) {
-          await client.sendMessage(chatId, "❌ No leads found. Add a lead first.\n\nType *menu* to go back.");
-          session.menu = "main";
-          return;
-        }
-
-        session.data = { items: [], leads };
-
-        let msg = "📄 *Generate Quotation*\n\n*Select a Lead:*\n\n";
-        leads.forEach((l, i) => {
-          msg += `*${i + 1}.* ${l.contactPerson} - ${l.companyName || "N/A"}\n`;
-        });
-        msg += "\nReply with number, or *0* to cancel.";
-
-        session.step = 1;
-        await client.sendMessage(chatId, msg);
-      } catch (error) {
-        await client.sendMessage(chatId, `❌ Error: ${error.message}\n\nType *menu* to go back.`);
-        session.menu = "main";
-      }
-      break;
-    }
-
-    // Step 1: Lead selected → show products
-    case 1: {
-      if (text === "0") {
-        session.menu = "main";
-        session.step = 0;
-        session.data = {};
-        return "show_menu";
-      }
-
-      const leadIndex = parseInt(text) - 1;
-      if (!session.data.leads || !session.data.leads[leadIndex]) {
-        await client.sendMessage(chatId, "❌ Invalid selection. Enter a valid number or *0* to cancel.");
-        return;
-      }
-
-      const selectedLead = session.data.leads[leadIndex];
-      session.data.leadId = selectedLead._id || selectedLead.id;
-      session.data.leadName = selectedLead.contactPerson;
-      session.step = 2;
       await showProductSelection(client, chatId, session);
       break;
     }
 
-    // Step 2: Product selection
-    case 2: {
+    // Step 1: Product selection
+    case 1: {
       if (text.toLowerCase() === "done") {
         if (session.data.items.length === 0) {
-          await client.sendMessage(chatId, "❌ Add at least one product before finishing.\n\nSelect a product number or type *0* to cancel:");
+          await client.sendMessage(
+            chatId,
+            `Please add at least one product before finishing. 🙂\n\nSelect a product number or type *back* to cancel.`
+          );
           return;
         }
-        session.step = 4;
+        session.step = 3;
         await client.sendMessage(
           chatId,
-          "Select discount type:\n\n1. PERCENTAGE\n2. FLAT (fixed amount)\n0. No discount\n\nReply with number:"
+          `Great! 🎉 Almost done!\n\nWould you like to apply a *discount*?\n\n` +
+          `1️⃣ Yes, percentage discount\n` +
+          `2️⃣ Yes, flat amount discount\n` +
+          `3️⃣ No discount\n\n` +
+          `Reply with the number 🙂`
         );
         return;
       }
 
       const index = parseInt(text) - 1;
       if (!session.data.products || !session.data.products[index]) {
-        await client.sendMessage(chatId, "❌ Invalid selection. Enter product number, *done* to finish, or *0* to cancel.");
+        await client.sendMessage(
+          chatId,
+          `Hmm, that doesn't seem right. 🤔\n\nPlease select a valid product number, type *done* to finish, or *back* to cancel.`
+        );
         return;
       }
 
       const selectedProduct = session.data.products[index];
       session.data.currentProduct = selectedProduct;
-      session.step = 3;
-      await client.sendMessage(chatId, `Enter quantity for *${selectedProduct.name}* (Rs.${selectedProduct.price}/${selectedProduct.unit || "piece"}):`);
+      session.step = 2;
+      await client.sendMessage(
+        chatId,
+        `You selected *${selectedProduct.name}* (Rs.${selectedProduct.price}/${selectedProduct.unit || "piece"}) 👍\n\nHow many do you need? Please enter the *quantity*.`
+      );
       break;
     }
 
-    // Step 3: Quantity entered → add item, back to product selection
-    case 3: {
+    // Step 2: Quantity entered → add item, back to product selection
+    case 2: {
       const qty = parseInt(text);
       if (isNaN(qty) || qty < 1) {
-        await client.sendMessage(chatId, "❌ Invalid quantity. Enter a number >= 1:");
+        await client.sendMessage(
+          chatId,
+          `Please enter a valid quantity (1 or more). 🙂`
+        );
         return;
       }
 
@@ -105,28 +75,25 @@ const handleQuotation = async (client, msg, session) => {
         lineTotal: lineTotal,
       });
 
-      let summary = `✅ Added: ${product.name} x ${qty} = ${formatCurrency(lineTotal)}\n\n`;
-      summary += `*Items so far:*\n`;
+      let summary = `✅ Added: *${product.name}* x ${qty} = ${formatCurrency(lineTotal)}\n\n`;
+      summary += `📦 *Items added so far:*\n`;
       let runningTotal = 0;
       session.data.items.forEach((item, i) => {
         summary += `${i + 1}. ${item.productName} x${item.quantity} = ${formatCurrency(item.lineTotal)}\n`;
         runningTotal += item.lineTotal;
       });
-      summary += `\n*Running Total: ${formatCurrency(runningTotal)}*\n`;
-      summary += "\n*Available Products:*\n";
-      session.data.products.forEach((p, i) => {
-        summary += `*${i + 1}.* ${p.name} - Rs.${p.price}/${p.unit || "piece"}\n`;
-      });
-      summary += "\nSelect another product number, or type *done* to finish:";
+      summary += `\n💰 *Running Total: ${formatCurrency(runningTotal)}*\n`;
+      summary += `\nWould you like to add more products? 🛒\n`;
+      summary += `Select a product number to add more, or type *done* to finish.`;
 
-      session.step = 2;
+      session.step = 1;
       await client.sendMessage(chatId, summary);
       break;
     }
 
-    // Step 4: Discount type selection
-    case 4: {
-      if (text === "0") {
+    // Step 3: Discount type selection
+    case 3: {
+      if (text === "3") {
         session.data.discountType = "FLAT";
         session.data.discountValue = 0;
         await submitQuotation(client, chatId, session);
@@ -135,32 +102,47 @@ const handleQuotation = async (client, msg, session) => {
 
       if (text === "1") {
         session.data.discountType = "PERCENTAGE";
-        session.step = 5;
-        await client.sendMessage(chatId, "Enter discount percentage (0-100):");
+        session.step = 4;
+        await client.sendMessage(
+          chatId,
+          `Sure! 👍\n\nPlease enter the *discount percentage* (0-100).`
+        );
         return;
       }
 
       if (text === "2") {
         session.data.discountType = "FLAT";
-        session.step = 5;
-        await client.sendMessage(chatId, "Enter flat discount amount:");
+        session.step = 4;
+        await client.sendMessage(
+          chatId,
+          `Sure! 👍\n\nPlease enter the *flat discount amount*.`
+        );
         return;
       }
 
-      await client.sendMessage(chatId, "Invalid option. Reply with 1, 2, or 0.");
+      await client.sendMessage(
+        chatId,
+        `Please reply with *1*, *2*, or *3*. 🙂`
+      );
       break;
     }
 
-    // Step 5: Discount value
-    case 5: {
+    // Step 4: Discount value
+    case 4: {
       const value = parseFloat(text);
       if (isNaN(value) || value < 0) {
-        await client.sendMessage(chatId, "❌ Enter a valid number:");
+        await client.sendMessage(
+          chatId,
+          `Please enter a valid number. 🙂`
+        );
         return;
       }
 
       if (session.data.discountType === "PERCENTAGE" && value > 100) {
-        await client.sendMessage(chatId, "❌ Percentage must be between 0 and 100:");
+        await client.sendMessage(
+          chatId,
+          `Percentage must be between 0 and 100. Please try again.`
+        );
         return;
       }
 
@@ -202,9 +184,12 @@ const submitQuotation = async (client, chatId, session) => {
 
     const formatted = formatQuotation(displayData);
     await client.sendMessage(chatId, formatted);
-    await client.sendMessage(chatId, `✅ Quotation saved successfully!\n\nType *menu* to go back.`);
+    await client.sendMessage(
+      chatId,
+      `✅ *Quotation generated successfully!* 🎉\n\nThank you! We'll get back to you soon. 😊\n\nType *hi* to start again.`
+    );
   } catch (error) {
-    await client.sendMessage(chatId, `❌ Error: ${error.message}\n\nType *menu* to go back.`);
+    await client.sendMessage(chatId, `❌ Oops! Something went wrong: ${error.message}\n\nType *hi* to try again.`);
   }
 
   session.menu = "main";
@@ -218,23 +203,30 @@ const showProductSelection = async (client, chatId, session) => {
     const products = result.data?.products || result.data || result.products || [];
 
     if (!products.length) {
-      await client.sendMessage(chatId, "❌ No products found.\n\nType *menu* to go back.");
+      await client.sendMessage(
+        chatId,
+        `Sorry, no products are available right now. 😔\n\nType *hi* to start again.`
+      );
       session.menu = "main";
       session.step = 0;
       return;
     }
 
     session.data.products = products;
+    if (!session.data.items) session.data.items = [];
 
-    let text = `Lead: *${session.data.leadName}*\n\n*Select a product to add:*\n\n`;
+    let text = `📄 *Let's create your quotation!*\n\n`;
+    text += `Lead: *${session.data.leadName}*\n\n`;
+    text += `Please select a product to add: 🛒\n\n`;
     products.forEach((p, i) => {
       text += `*${i + 1}.* ${p.name} - Rs.${p.price}/${p.unit || "piece"}\n`;
     });
-    text += "\nReply with product number.\nType *done* when finished adding products.\nType *0* to cancel.";
+    text += `\nReply with the product number.\nType *done* when you're finished adding products.`;
 
+    session.step = 1;
     await client.sendMessage(chatId, text);
   } catch (error) {
-    await client.sendMessage(chatId, `❌ Error fetching products: ${error.message}\n\nType *menu* to go back.`);
+    await client.sendMessage(chatId, `❌ Oops! Couldn't load products: ${error.message}\n\nType *hi* to try again.`);
     session.menu = "main";
     session.step = 0;
   }

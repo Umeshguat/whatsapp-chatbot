@@ -75,17 +75,29 @@ const handleAddLead = async (client, msg, session) => {
       try {
         const result = await apiClient.post("/api/v1/public/leads", session.data);
         const lead = result.data || result;
+        const leadId = lead._id || lead.id;
+        const leadName = session.data.contactPerson;
+
         await client.sendMessage(
           chatId,
-          `✅ *Lead Added Successfully!* 🎉\n\n${formatLeadSummary(lead)}\n\nThank you for your details! We'll get back to you soon. 😊\n\nType *hi* to start again.`
+          `✅ *Lead Added Successfully!* 🎉\n\n${formatLeadSummary(lead)}\n\nThank you for your details! 😊`
+        );
+
+        // Ask if they want to generate a quotation
+        session.menu = "ask_quotation";
+        session.step = 0;
+        session.data = { leadId, leadName };
+
+        await client.sendMessage(
+          chatId,
+          `Would you like to generate a *quotation* for this lead? 📄\n\nReply *Yes* to generate quotation\nReply *No* to finish`
         );
       } catch (error) {
         await client.sendMessage(chatId, `❌ Oops! Something went wrong: ${error.message}\n\nType *hi* to try again.`);
+        session.menu = "main";
+        session.step = 0;
+        session.data = {};
       }
-
-      session.menu = "main";
-      session.step = 0;
-      session.data = {};
       break;
   }
 };
