@@ -1,3 +1,4 @@
+const { MessageMedia } = require("whatsapp-web.js");
 const apiClient = require("../utils/apiClient");
 const { formatQuotation, formatCurrency } = require("../utils/formatter");
 
@@ -22,15 +23,9 @@ const handleQuotation = async (client, msg, session) => {
           );
           return;
         }
-        session.step = 3;
-        await client.sendMessage(
-          chatId,
-          `Great! 🎉 Almost done!\n\nWould you like to apply a *discount*?\n\n` +
-          `1️⃣ Yes, percentage discount\n` +
-          `2️⃣ Yes, flat amount discount\n` +
-          `3️⃣ No discount\n\n` +
-          `Reply with the number 🙂`
-        );
+        session.data.discountType = "FLAT";
+        session.data.discountValue = 0;
+        await submitQuotation(client, chatId, session);
         return;
       }
 
@@ -91,83 +86,34 @@ const handleQuotation = async (client, msg, session) => {
       break;
     }
 
-    // Step 3: Discount type selection
-    case 3: {
-      if (text === "3") {
-        session.data.discountType = "FLAT";
-        session.data.discountValue = 0;
-        await submitQuotation(client, chatId, session);
-        return;
-      }
-
-      if (text === "1") {
-        session.data.discountType = "PERCENTAGE";
-        session.step = 4;
-        await client.sendMessage(
-          chatId,
-          `Sure! 👍\n\nPlease enter the *discount percentage* (0-100).`
-        );
-        return;
-      }
-
-      if (text === "2") {
-        session.data.discountType = "FLAT";
-        session.step = 4;
-        await client.sendMessage(
-          chatId,
-          `Sure! 👍\n\nPlease enter the *flat discount amount*.`
-        );
-        return;
-      }
-
-      await client.sendMessage(
-        chatId,
-        `Please reply with *1*, *2*, or *3*. 🙂`
-      );
-      break;
-    }
-
-    // Step 4: Discount value
-    case 4: {
-      const value = parseFloat(text);
-      if (isNaN(value) || value < 0) {
-        await client.sendMessage(
-          chatId,
-          `Please enter a valid number. 🙂`
-        );
-        return;
-      }
-
-      if (session.data.discountType === "PERCENTAGE" && value > 100) {
-        await client.sendMessage(
-          chatId,
-          `Percentage must be between 0 and 100. Please try again.`
-        );
-        return;
-      }
-
-      session.data.discountValue = value;
-      await submitQuotation(client, chatId, session);
-      break;
-    }
   }
 };
 
 const submitQuotation = async (client, chatId, session) => {
   try {
+    if (!session.data.leadId) {
+      await client.sendMessage(chatId, `❌ Lead ID is missing. Please start over.\n\nType *hi* to try again.`);
+      session.menu = "main";
+      session.step = 0;
+      session.data = {};
+      return;
+    }
+
     const payload = {
       lead: String(session.data.leadId),
       items: session.data.items.map((item) => ({
         product: String(item.product),
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
       })),
       discountType: session.data.discountType,
-      discountValue: session.data.discountValue,
+      discountValue: Number(session.data.discountValue),
       status: "DRAFT",
     };
 
+    console.log("Quotation payload:", JSON.stringify(payload, null, 2));
     const result = await apiClient.post("/api/v1/quotations/generate", payload);
+    console.log("Quotation response:", JSON.stringify(result, null, 2));
     const quotation = result.data || result;
 
     // Build display data from API response or local data
@@ -184,6 +130,18 @@ const submitQuotation = async (client, chatId, session) => {
 
     const formatted = formatQuotation(displayData);
     await client.sendMessage(chatId, formatted);
+
+    // Fetch and send PDF
+    const quotationId = quotation._id || quotation.id;
+    try {
+      const pdfBuffer = await apiClient.getBuffer(`/api/v1/public/quotations/${quotationId}/pdf`);
+      const pdfMedia = new MessageMedia("application/pdf", pdfBuffer.toString("base64"), `Quotation_${displayData.quotationNumber}.pdf`);
+      await client.sendMessage(chatId, pdfMedia, { caption: `📎 Here's your quotation PDF!` });
+    } catch (pdfError) {
+      console.error("PDF fetch error:", pdfError.message);
+      await client.sendMessage(chatId, `⚠️ Quotation created but couldn't fetch the PDF. Please contact support.`);
+    }
+
     await client.sendMessage(
       chatId,
       `✅ *Quotation generated successfully!* 🎉\n\nThank you! We'll get back to you soon. 😊\n\nType *hi* to start again.`

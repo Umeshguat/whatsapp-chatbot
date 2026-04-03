@@ -22,6 +22,7 @@ const handleAddLead = async (client, msg, session) => {
         chatId,
         `Thank you, *${text}*! 👍\n\nPlease share your *phone number* 📱`
       );
+      
       break;
 
     case 2:
@@ -44,17 +45,19 @@ const handleAddLead = async (client, msg, session) => {
 
     case 4:
       session.data.companyName = text;
-      session.data.source = "WhatsApp";
+      session.data.source = "Website";
 
       try {
         const result = await apiClient.post("/api/v1/public/leads", session.data);
+        console.log("Lead API response:", JSON.stringify(result, null, 2));
         const lead = result.data || result;
         const leadId = lead._id || lead.id;
         const leadName = session.data.contactPerson;
+        console.log("Lead ID:", leadId, "Lead Name:", leadName);
 
         await client.sendMessage(
           chatId,
-          `✅ *Lead Added Successfully!* 🎉\n\n${formatLeadSummary(lead)}\n\nThank you for your details! 😊`
+          `${formatLeadSummary(lead)}\n\nThank you for your details! 😊`
         );
 
         // Ask if they want to generate a quotation
