@@ -144,7 +144,7 @@ const submitQuotation = async (client, chatId, session) => {
 
     await client.sendMessage(
       chatId,
-      `✅ *Quotation generated successfully!* 🎉\n\nThank you! We'll get back to you soon. 😊\n\nType *hi* to start again.`
+      `🎉\n\nThank you! We'll get back to you soon. 😊\n\nType *hi* to start again.`
     );
   } catch (error) {
     await client.sendMessage(chatId, `❌ Oops! Something went wrong: ${error.message}\n\nType *hi* to try again.`);
@@ -173,8 +173,7 @@ const showProductSelection = async (client, chatId, session) => {
     session.data.products = products;
     if (!session.data.items) session.data.items = [];
 
-    let text = `📄 *Let's create your quotation!*\n\n`;
-    text += `Lead: *${session.data.leadName}*\n\n`;
+    let text = `Lead: *${session.data.leadName}*\n\n`;
     text += `Please select a product to add: 🛒\n\n`;
     products.forEach((p, i) => {
       text += `*${i + 1}.* ${p.name} - Rs.${p.price}/${p.unit || "piece"}\n`;
