@@ -1,6 +1,7 @@
 const { handleAddLead, handleViewLeads } = require("./leadHandler");
 const { handleQuotation } = require("./quotationHandler");
 const { handleProductMenu } = require("./productHandler");
+const { startAiFlow, handleAiFlow } = require("./aiHandler");
 
 const sessions = new Map();
 
@@ -99,6 +100,10 @@ const menuHandler = async (client, msg) => {
       await handleQuotation(client, msg, session);
       break;
 
+    case "ai_flow":
+      await handleAiFlow(client, msg, session);
+      break;
+
     case "lead_view":
       const result = await handleViewLeads(client, msg, session);
       if (result === "show_menu") {
@@ -120,11 +125,8 @@ const menuHandler = async (client, msg) => {
       break;
 
     default:
-      // First time or unknown state - greet them
-      await client.sendMessage(
-        chatId,
-        `👋 Hi there! Type *hi* or *hello* to get started.`
-      );
+      // Unknown state → let OpenAI decide what the user wants
+      await startAiFlow(client, msg, session);
       break;
   }
 };
@@ -158,11 +160,8 @@ const handleGreetingResponse = async (client, msg, session) => {
     return;
   }
 
-  // Invalid input
-  await client.sendMessage(
-    chatId,
-    `I didn't quite get that. 🤔\n\nReply *Yes* to add a lead\nReply *Help* for assistance\nOr type *hi* to start over.`
-  );
+  // Anything else → let OpenAI interpret it (free-form lead / quote request)
+  await startAiFlow(client, msg, session);
 };
 
 const handleAskQuotationResponse = async (client, msg, session) => {

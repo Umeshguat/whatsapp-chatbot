@@ -11,9 +11,21 @@ const getClient = () => {
   return openai;
 };
 
+const SYSTEM_COMPANY_CONTEXT = `You are a lead + quotation assistant for a digital services company. We offer:
+- SEO Services
+- Website Development / Website Design
+- Mobile App Development (Android / iOS)
+- Digital Marketing
+- Social Media Marketing
+- Graphic Design / Logo Design
+- Content Writing
+- E-commerce Solutions
+- Software Development
+- Hosting / Domain`;
+
 /**
- * Analyze a WhatsApp message using OpenAI to detect lead intent
- * and extract available contact/service information.
+ * Analyze a free-form WhatsApp message and extract intent + lead data
+ * + interested services/products in one shot.
  */
 const analyzeMessage = async (message, senderPhone) => {
   try {
@@ -24,60 +36,50 @@ const analyzeMessage = async (message, senderPhone) => {
       messages: [
         {
           role: "system",
-          content: `You are a lead qualification assistant for a digital services company that offers:
-- SEO Services
-- Website Development
-- Mobile App Development
-- Digital Marketing
-- Social Media Marketing
-- Graphic Design
-- Content Writing
-- E-commerce Solutions
+          content: `${SYSTEM_COMPANY_CONTEXT}
 
-Analyze the incoming WhatsApp message and determine:
-1. Is this person interested in any service? (lead intent)
-2. Extract any available information: name, phone, email, company name, services they're interested in.
+Analyze the incoming WhatsApp message. Decide the user's intent and pull out every piece of contact / business data you can.
 
-Respond ONLY in this exact JSON format (no markdown, no extra text):
+Intents:
+- "create_quote"  → user wants a price/quote/proposal/estimate for a service
+- "add_lead"      → user wants to register / share their details / be contacted
+- "casual"        → greeting, chit-chat, or irrelevant
+
+For interestedProducts: pull out EVERY service or product mentioned. Infer quantity (default 1 if not said). Use the service name the user spoke, not our catalog (matching happens separately).
+
+Respond ONLY in this exact JSON (no markdown):
 {
-  "isLead": true/false,
-  "confidence": "high"/"medium"/"low",
+  "intent": "create_quote" | "add_lead" | "casual",
+  "confidence": "high" | "medium" | "low",
   "extractedData": {
-    "contactPerson": "name if mentioned, otherwise null",
-    "phone": "phone if mentioned, otherwise null",
-    "email": "email if mentioned, otherwise null",
-    "companyName": "company if mentioned, otherwise null",
-    "interestedServices": ["list of services they asked about"],
-    "message": "original message summary"
+    "contactPerson": "full name if mentioned, else null",
+    "phone": "phone if mentioned, else null",
+    "email": "email if mentioned, else null",
+    "companyName": "company if mentioned, else null",
+    "interestedProducts": [ { "service": "e.g. Website Development", "quantity": 1 } ]
   },
-  "reply": "A friendly, professional reply acknowledging their interest and asking for any missing information (name, phone, email, company) to create a lead. Keep it short and conversational for WhatsApp."
-}
-
-If the message is NOT a lead (just casual chat, spam, or irrelevant), set isLead to false and provide a friendly reply.`,
+  "reply": "Short, friendly WhatsApp acknowledgement. If intent is create_quote or add_lead and fields are missing, ask ONLY for what's missing (name / phone / email / company). If intent is create_quote and no service was named, also ask which service they need. Keep it one short paragraph."
+}`,
         },
         {
           role: "user",
-          content: `WhatsApp message from ${senderPhone}:\n"${message}"`,
+          content: `Message from ${senderPhone}:\n"${message}"`,
         },
       ],
     });
 
     const content = response.choices[0].message.content.trim();
-    console.log("OpenAI analysis response:", content);
-    const parsed = JSON.parse(content);
-    return parsed;
+    console.log("OpenAI analyze:", content);
+    return JSON.parse(content);
   } catch (error) {
-    console.error("OpenAI analysis error:", error.message);
-    if (error.response) {
-      console.error("OpenAI API status:", error.response.status);
-    }
+    console.error("OpenAI analyze error:", error.message);
     return null;
   }
 };
 
 /**
- * Extract remaining lead fields from a follow-up message
- * when we already have partial data.
+ * Extract more fields from a follow-up reply given what we already have.
+ * Also appends any newly mentioned services.
  */
 const extractLeadDetails = async (message, existingData) => {
   try {
@@ -94,41 +96,90 @@ const extractLeadDetails = async (message, existingData) => {
       messages: [
         {
           role: "system",
-          content: `You are extracting contact details from a WhatsApp message.
-We already have this data: ${JSON.stringify(existingData)}
-We still need: ${missing.join(", ")}
+          content: `${SYSTEM_COMPANY_CONTEXT}
 
-Extract any of the missing fields from the user's message.
+We are collecting lead details from a user via WhatsApp.
+Already collected: ${JSON.stringify(existingData)}
+Still missing contact fields: ${missing.join(", ") || "none"}
+Intent: ${existingData.intent || "unknown"}
+Services already captured: ${JSON.stringify(existingData.interestedProducts || [])}
 
-Respond ONLY in this exact JSON format:
+From the user's latest message, extract any of the missing contact fields AND any new services/products they mention.
+
+Respond ONLY in this JSON:
 {
   "extractedData": {
-    "contactPerson": "name if found, otherwise null",
-    "phone": "phone if found, otherwise null",
-    "email": "email if found, otherwise null",
-    "companyName": "company if found, otherwise null"
+    "contactPerson": "name if found, else null",
+    "phone": "phone if found, else null",
+    "email": "email if found, else null",
+    "companyName": "company if found, else null",
+    "interestedProducts": [ { "service": "...", "quantity": 1 } ]
   },
   "isComplete": true/false,
-  "reply": "If all fields are now filled, confirm the details. If still missing fields, ask for the remaining ones in a friendly WhatsApp message."
+  "reply": "Friendly short WhatsApp reply. If contact fields are still missing, ask only for those. If intent is create_quote and no service is captured yet, also ask which service they need. If all fields are filled AND (intent is add_lead OR at least one service is captured), confirm we are preparing everything."
+}`,
+        },
+        { role: "user", content: message },
+      ],
+    });
+
+    const content = response.choices[0].message.content.trim();
+    console.log("OpenAI extract:", content);
+    return JSON.parse(content);
+  } catch (error) {
+    console.error("OpenAI extract error:", error.message);
+    return null;
+  }
+};
+
+/**
+ * Map the user's interested services to actual products from the catalog.
+ * Returns an array of { productId, quantity } picked from availableProducts.
+ */
+const matchProductsToServices = async (interestedProducts, availableProducts) => {
+  try {
+    const catalog = availableProducts.map((p) => ({
+      id: String(p._id || p.id),
+      name: p.name,
+      description: p.description || "",
+      price: p.price,
+      unit: p.unit || "piece",
+    }));
+
+    const response = await getClient().chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `You match requested services to a product catalog.
+
+Available catalog (JSON):
+${JSON.stringify(catalog, null, 2)}
+
+For each requested service, pick the single BEST matching product id from the catalog. If nothing matches reasonably, skip it. Use the quantity given by the user (default 1).
+
+Respond ONLY in this JSON:
+{
+  "matches": [ { "productId": "<id from catalog>", "quantity": 1, "matchedFor": "requested service string" } ],
+  "unmatched": [ "requested services that had no good match" ]
 }`,
         },
         {
           role: "user",
-          content: message,
+          content: `Requested:\n${JSON.stringify(interestedProducts, null, 2)}`,
         },
       ],
     });
 
     const content = response.choices[0].message.content.trim();
-    console.log("OpenAI extraction response:", content);
+    console.log("OpenAI match:", content);
     return JSON.parse(content);
   } catch (error) {
-    console.error("OpenAI extraction error:", error.message);
-    if (error.response) {
-      console.error("OpenAI API status:", error.response.status);
-    }
+    console.error("OpenAI match error:", error.message);
     return null;
   }
 };
 
-module.exports = { analyzeMessage, extractLeadDetails };
+module.exports = { analyzeMessage, extractLeadDetails, matchProductsToServices };
